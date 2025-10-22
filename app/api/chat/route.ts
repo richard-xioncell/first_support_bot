@@ -19,10 +19,10 @@ export async function POST(req: Request) {
     });
 
     const reply = response.choices?.[0]?.message?.content || "No reply generated.";
-
     return NextResponse.json({ reply });
-  } catch (error: any) {
-    console.error("Error in /api/chat:", error);
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    console.error("Error in /api/chat:", error.message);
     return NextResponse.json(
       { error: error.message || "Internal Server Error" },
       { status: 500 }
