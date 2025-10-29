@@ -1,79 +1,109 @@
+// app/page.tsx
 "use client";
-import { useState, useRef, useEffect } from "react";
+
+import { useState } from "react";
 
 export default function Home() {
-  const [messages, setMessages] = useState<{ role: string; content: string }[]>([]);
   const [input, setInput] = useState("");
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [messages, setMessages] = useState<
+    { role: "user" | "assistant"; content: string }[]
+  >([]);
+  const [loading, setLoading] = useState(false);
 
-  // Scroll to bottom when messages update
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  async function sendMessage(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = input.trim();
+    if (!trimmed) return;
 
-  async function sendMessage() {
-    if (!input.trim()) return;
-
-    const userMessage = { role: "user", content: input };
-    setMessages((prev) => [...prev, userMessage]);
+    // push user message
+    setMessages((prev) => [...prev, { role: "user", content: trimmed }]);
     setInput("");
+    setLoading(true);
 
-    const res = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: input }),
-    });
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // ✅ FIX: send "message" instead of "content"
+        body: JSON.stringify({ message: trimmed }),
+      });
 
-    const data = await res.json();
-    const botMessage = { role: "assistant", content: data.reply };
-    setMessages((prev) => [...prev, botMessage]);
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.error || "Request failed");
+      }
+
+      const reply =
+        data?.reply ||
+        data?.message ||
+        "I can only answer questions that are covered in the uploaded documentation.";
+
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: reply },
+      ]);
+    } catch (err: any) {
+      console.error("Chat error:", err);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content:
+            "Hmm, I hit an error. Try again.\n\n" +
+            (err?.message || "Unknown error"),
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
-    <main className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-slate-900 via-gray-900 to-slate-800 text-white p-4">
-      <div className="w-full max-w-2xl bg-gray-800/60 backdrop-blur-md rounded-2xl shadow-lg border border-gray-700 overflow-hidden">
-        <div className="p-4 border-b border-gray-700 bg-gray-900/70">
-          <h1 className="text-2xl font-bold text-center">Support Chatbot</h1>
-        </div>
+    <main className="flex flex-col items-center justify-between min-h-screen p-8">
+      <div className="w-full max-w-2xl space-y-4">
+        <h1 className="text-2xl font-bold text-center">
+          First Support Bot
+        </h1>
 
-        <div className="h-[480px] overflow-y-auto p-4 space-y-3">
-          {messages.map((msg, i) => (
+        <div className="border rounded-md p-4 h-[60vh] overflow-y-auto bg-gray-50">
+          {messages.map((m, i) => (
             <div
               key={i}
-              className={`flex ${
-                msg.role === "user" ? "justify-end" : "justify-start"
+              className={`mb-3 ${
+                m.role === "user" ? "text-blue-700" : "text-gray-800"
               }`}
             >
-              <div
-                className={`px-4 py-2 rounded-2xl max-w-[80%] ${
-                  msg.role === "user"
-                    ? "bg-blue-600 text-white rounded-br-none"
-                    : "bg-gray-700 text-gray-100 rounded-bl-none"
-                }`}
-              >
-                {msg.content}
-              </div>
+              <strong>{m.role === "user" ? "You" : "Bot"}:</strong>{" "}
+              {m.content}
             </div>
           ))}
-          <div ref={messagesEndRef} />
+          {loading && (
+            <div className="text-gray-500 italic">Bot is thinking…</div>
+          )}
         </div>
 
-        <div className="p-4 border-t border-gray-700 bg-gray-900/70 flex gap-2">
+        <form
+          onSubmit={sendMessage}
+          className="flex gap-2 border-t pt-4 mt-2"
+        >
           <input
-            className="flex-grow bg-gray-800 border border-gray-700 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 text-white"
+            type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Type a message..."
-            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+            className="flex-1 border rounded-md p-2"
+            placeholder="Ask a question about your documentation..."
           />
           <button
-            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 rounded-xl transition"
-            onClick={sendMessage}
+            type="submit"
+            disabled={loading}
+            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50"
           >
             Send
           </button>
-        </div>
+        </form>
       </div>
     </main>
   );
 }
+
